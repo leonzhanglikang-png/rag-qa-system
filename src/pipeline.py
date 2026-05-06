@@ -68,6 +68,10 @@ class RAGPipeline:
         if force_rebuild or not Path(self.persist_dir).exists():
             print("📥 首次构建知识库,执行完整 pipeline...")
             docs = load_pdfs(self.pdf_dir)
+            #注入章节元素
+            from section_detector import enrich_documents_with_sections
+            docs = enrich_documents_with_sections(docs)
+            
             chunks = split_documents(
                 docs,
                 chunk_size=self.chunk_size,
