@@ -8,3 +8,4 @@ data/raw_pdfs/*.pdf
 .ipynb_checkpoints/
 *.log
 outputs/
+bm25_index.pkl

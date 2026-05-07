@@ -1,24 +1,31 @@
 """
-RAG 主流程模块
-封装端到端 RAG 系统:加载 → 切片 → 向量化 → 检索 → 生成
+RAG 主流程模块 v3
+端到端 RAG 系统: 加载 → 切片 → 章节增强 → 向量化 → 混合检索 → Reranker → 生成
 
-外部只需要实例化 RAGPipeline 并调用 .query() 即可
+v3 升级 (vs v2):
+- 集成混合检索 (BM25 30% + 向量 70%, RRF 融合)
+- 集成 Reranker (bge-reranker-v2-m3 cross-encoder 精排)
+- 元数据透传: source_file → page → section → chunk_id → retrieval_score → rerank_score
 """
 import os
+os.environ["ANONYMIZED_TELEMETRY"] = "False"
+
 from typing import List, Dict, Optional
 from pathlib import Path
 
 from langchain_core.documents import Document
 
 from loader import load_pdfs
+from section_detector import enrich_documents_with_sections
 from splitter import split_documents
-from retriever import build_vectorstore, search
+from retriever import build_vectorstore, search, build_hybrid_retriever, search_hybrid
 from generator import generate_answer
+from reranker import rerank_documents
 
 
 class RAGPipeline:
     """
-    端到端 RAG Pipeline
+    端到端 RAG Pipeline v3 (混合检索 + Reranker)
     
     使用示例:
         rag = RAGPipeline()
@@ -32,96 +39,112 @@ class RAGPipeline:
         persist_dir: str = "./chroma_db",
         chunk_size: int = 500,
         chunk_overlap: int = 50,
-        top_k: int = 5,
+        candidate_k: int = 20,    # 召回阶段拉多少候选
+        final_k: int = 5,          # 最终给 LLM 几个 chunk
+        use_rerank: bool = True,   # 是否启用 Reranker
+        bm25_weight: float = 0.3,
+        vector_weight: float = 0.7,
         llm_model: str = "deepseek-chat",
         temperature: float = 0.3,
         force_rebuild: bool = False,
     ):
-        """
-        初始化 RAG Pipeline
-        
-        Args:
-            pdf_dir: PDF 文档目录
-            persist_dir: 向量库持久化目录
-            chunk_size: 切片大小
-            chunk_overlap: 切片重叠
-            top_k: 检索返回的文档数
-            llm_model: 使用的 LLM 模型
-            temperature: 生成温度
-            force_rebuild: 是否强制重建向量库
-        """
         self.pdf_dir = pdf_dir
         self.persist_dir = persist_dir
         self.chunk_size = chunk_size
         self.chunk_overlap = chunk_overlap
-        self.top_k = top_k
+        self.candidate_k = candidate_k
+        self.final_k = final_k
+        self.use_rerank = use_rerank
+        self.bm25_weight = bm25_weight
+        self.vector_weight = vector_weight
         self.llm_model = llm_model
         self.temperature = temperature
         
-        print("🚀 初始化 RAG Pipeline...")
-        self.vectorstore = self._setup_vectorstore(force_rebuild)
+        print("🚀 初始化 RAG Pipeline v3 (混合检索 + Reranker)")
+        print(f"   配置: candidate_k={candidate_k}, final_k={final_k}, use_rerank={use_rerank}")
+        print(f"   权重: BM25={bm25_weight}, 向量={vector_weight}\n")
+        
+        # 准备 chunks 和向量库
+        self.chunks, self.vectorstore = self._setup(force_rebuild)
+        
+        # 准备混合检索器
+        self.hybrid_retriever = build_hybrid_retriever(
+            self.chunks,
+            self.vectorstore,
+            bm25_weight=bm25_weight,
+            vector_weight=vector_weight,
+            candidate_k=candidate_k,
+        )
+        
         print("✅ RAG Pipeline 就绪\n")
     
-    def _setup_vectorstore(self, force_rebuild: bool):
-        """构建或加载向量库"""
-        # 如果向量库不存在 或 强制重建,走完整 pipeline
-        if force_rebuild or not Path(self.persist_dir).exists():
-            print("📥 首次构建知识库,执行完整 pipeline...")
-            docs = load_pdfs(self.pdf_dir)
-            #注入章节元素
-            from section_detector import enrich_documents_with_sections
-            docs = enrich_documents_with_sections(docs)
-            
-            chunks = split_documents(
-                docs,
-                chunk_size=self.chunk_size,
-                chunk_overlap=self.chunk_overlap,
-            )
-            return build_vectorstore(
-                chunks,
-                persist_dir=self.persist_dir,
-                force_rebuild=force_rebuild,
-            )
-        else:
-            # 已存在,直接复用
-            print("📂 加载已存在的向量库...")
-            return build_vectorstore([], persist_dir=self.persist_dir)
-    
-    def retrieve(self, question: str, top_k: Optional[int] = None) -> List[Document]:
-        """
-        只做检索,返回相关 chunks(不调 LLM, 节省成本)
+    def _setup(self, force_rebuild: bool):
+        """准备 chunks + 向量库"""
+        # 加载 PDF (v2: PyPDF + pdfplumber)
+        docs = load_pdfs(self.pdf_dir)
         
-        用于:① 调试检索效果  ② 评估时单独测检索召回率
+        # 注入章节元数据
+        docs = enrich_documents_with_sections(docs)
+        
+        # 切片
+        chunks = split_documents(
+            docs,
+            chunk_size=self.chunk_size,
+            chunk_overlap=self.chunk_overlap,
+        )
+        
+        # 向量库
+        vectorstore = build_vectorstore(
+            chunks,
+            persist_dir=self.persist_dir,
+            force_rebuild=force_rebuild,
+        )
+        
+        return chunks, vectorstore
+    
+    def retrieve(
+        self,
+        question: str,
+        candidate_k: Optional[int] = None,
+        final_k: Optional[int] = None,
+        use_rerank: Optional[bool] = None,
+    ) -> List[Document]:
         """
-        k = top_k or self.top_k
-        return search(question, self.vectorstore, top_k=k)
+        混合检索 + (可选)Reranker 精排
+        """
+        ck = candidate_k or self.candidate_k
+        fk = final_k or self.final_k
+        do_rerank = self.use_rerank if use_rerank is None else use_rerank
+        
+        # Step 1: 混合检索召回
+        candidates = search_hybrid(question, self.hybrid_retriever, top_k=ck)
+        
+        # Step 2: Reranker 精排(可选)
+        if do_rerank:
+            return rerank_documents(question, candidates, top_k=fk)
+        else:
+            return candidates[:fk]
     
     def query(
         self,
         question: str,
-        top_k: Optional[int] = None,
+        candidate_k: Optional[int] = None,
+        final_k: Optional[int] = None,
+        use_rerank: Optional[bool] = None,
         return_context: bool = False,
     ) -> Dict:
         """
-        端到端查询:检索 + 生成
-        
-        Args:
-            question: 用户问题
-            top_k: 检索数量(不传用默认)
-            return_context: 是否返回中间检索结果(调试用)
-        
-        Returns:
-            {
-                "question": 原问题,
-                "answer": LLM 生成的答案,
-                "sources": 引用的来源列表,
-                "retrieved_docs": (可选) 检索到的原始 chunks,
-            }
+        端到端查询: 检索 + 精排 + 生成
         """
-        # 1. 检索
-        retrieved_docs = self.retrieve(question, top_k=top_k)
+        # 检索 + 精排
+        retrieved_docs = self.retrieve(
+            question,
+            candidate_k=candidate_k,
+            final_k=final_k,
+            use_rerank=use_rerank,
+        )
         
-        # 2. 生成
+        # 生成
         result = generate_answer(
             question,
             retrieved_docs,
@@ -129,7 +152,6 @@ class RAGPipeline:
             temperature=self.temperature,
         )
         
-        # 3. 整理输出
         output = {
             "question": question,
             "answer": result["answer"],
@@ -144,14 +166,15 @@ class RAGPipeline:
 
 # ==================== 测试入口 ====================
 if __name__ == "__main__":
-    # 一行初始化
+    # 一行初始化(默认开启 Reranker)
     rag = RAGPipeline()
     
-    # 测试问题
+    # 4 个核心测试问题(跟 Day 1/2/3 一致, 方便横向对比)
     test_questions = [
         "LoRA 是什么? 它如何减少可训练参数?",
-        "What is the core idea of Chain-of-Thought prompting?",
+        "什么是检索增强生成?它解决什么问题?",
         "Self-RAG 和普通 RAG 的区别是什么?",
+        "Explain the self-attention mechanism in Transformer",
     ]
     
     for q in test_questions:
@@ -166,4 +189,3 @@ if __name__ == "__main__":
         for s in result["sources"]:
             print(f"   - {s['file']} (第{s['page']}页)")
         print()
-#ceshi

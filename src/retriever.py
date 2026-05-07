@@ -148,6 +148,65 @@ def search(
     
     return docs
 
+# ==================== 混合检索 ====================
+def build_hybrid_retriever(
+    chunks,
+    vectorstore,
+    vector_weight: float = 0.7,  # 调优后的最优权重
+    bm25_weight: float = 0.3,
+    top_k: int = 5,
+    candidate_k: int = 10,
+):
+    """
+    构建混合检索器: BM25 + 向量检索, 用 RRF 融合
+    
+    Args:
+        chunks: BM25 索引用的 Document 列表
+        vectorstore: 已构建的 Chroma 向量库
+        vector_weight: 向量检索权重(默认 0.5)
+        bm25_weight: BM25 权重(默认 0.5)
+        top_k: 最终返回 top-k
+        candidate_k: 每路召回的候选数(融合前)
+    
+    Returns:
+        EnsembleRetriever 实例
+    """
+    from langchain.retrievers import EnsembleRetriever
+    from bm25_retriever import build_bm25_retriever
+    
+    # BM25 检索器
+    bm25 = build_bm25_retriever(chunks, k=candidate_k)
+    
+    # 向量检索器
+    vector_retriever = vectorstore.as_retriever(
+        search_kwargs={"k": candidate_k}
+    )
+    
+    # 融合(LangChain 内部用 RRF)
+    ensemble = EnsembleRetriever(
+        retrievers=[bm25, vector_retriever],
+        weights=[bm25_weight, vector_weight],
+    )
+    
+    # 设置最终 top_k
+    # 注意: EnsembleRetriever 不直接支持 top_k 参数,
+    # 我们在调用时再截取
+    ensemble._top_k = top_k
+    return ensemble
+
+
+def search_hybrid(
+    query: str,
+    hybrid_retriever,
+    top_k: int = 5,
+):
+    """
+    用混合检索器查询
+    """
+    # EnsembleRetriever 返回融合后的全部候选,我们取前 top_k
+    results = hybrid_retriever.invoke(query)
+    return results[:top_k]
+
 
 # ==================== 测试入口 ====================
 if __name__ == "__main__":
