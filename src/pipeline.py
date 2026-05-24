@@ -21,7 +21,7 @@ from splitter import split_documents
 from retriever import build_vectorstore, search, build_hybrid_retriever, search_hybrid
 from generator import generate_answer
 from reranker import rerank_documents
-
+from hyde import hyde_rewrite
 
 class RAGPipeline:
     """
@@ -42,9 +42,10 @@ class RAGPipeline:
         candidate_k: int = 20,    # 召回阶段拉多少候选
         final_k: int = 5,          # 最终给 LLM 几个 chunk
         use_rerank: bool = True,   # 是否启用 Reranker
+        use_hyde: bool = True,
         bm25_weight: float = 0.3,
         vector_weight: float = 0.7,
-        llm_model: str = "deepseek-chat",
+        llm_model: str = "deepseek-chat",       
         temperature: float = 0.3,
         force_rebuild: bool = False,
     ):
@@ -55,6 +56,7 @@ class RAGPipeline:
         self.candidate_k = candidate_k
         self.final_k = final_k
         self.use_rerank = use_rerank
+        self.use_hyde = use_hyde
         self.bm25_weight = bm25_weight
         self.vector_weight = vector_weight
         self.llm_model = llm_model
@@ -108,20 +110,31 @@ class RAGPipeline:
         candidate_k: Optional[int] = None,
         final_k: Optional[int] = None,
         use_rerank: Optional[bool] = None,
+        use_hyde: Optional[bool] = None,
     ) -> List[Document]:
         """
-        混合检索 + (可选)Reranker 精排
+        混合检索 + (可选)HyDE 查询改写 + (可选)Reranker 精排
         """
         ck = candidate_k or self.candidate_k
         fk = final_k or self.final_k
         do_rerank = self.use_rerank if use_rerank is None else use_rerank
+        do_hyde = self.use_hyde if use_hyde is None else use_hyde
+        
+        # Step 0: HyDE 查询改写(可选)
+        search_query = question
+        if do_hyde:
+            print("  💭 HyDE: 生成假设答案改写查询...")
+            search_query = hyde_rewrite(question)
         
         # Step 1: 混合检索召回
-        candidates = search_hybrid(question, self.hybrid_retriever, top_k=ck)
+        candidates = search_hybrid(search_query, self.hybrid_retriever, top_k=ck)
         
-        # Step 2: Reranker 精排(可选)
+        # Step 2: Reranker 精排
         if do_rerank:
-            return rerank_documents(question, candidates, top_k=fk)
+            # 实测发现: 如果开了 HyDE, Reranker 也用 HyDE 改写后的查询效果更好
+            # 因为 HyDE 把"问题风格"转成"答案风格", cross-encoder 也能从中受益
+            rerank_query = search_query if do_hyde else question
+            return rerank_documents(rerank_query, candidates, top_k=fk)
         else:
             return candidates[:fk]
     
@@ -131,20 +144,18 @@ class RAGPipeline:
         candidate_k: Optional[int] = None,
         final_k: Optional[int] = None,
         use_rerank: Optional[bool] = None,
+        use_hyde: Optional[bool] = None,
         return_context: bool = False,
     ) -> Dict:
-        """
-        端到端查询: 检索 + 精排 + 生成
-        """
-        # 检索 + 精排
+        """端到端查询: HyDE → 检索 → 精排 → 生成"""
         retrieved_docs = self.retrieve(
             question,
             candidate_k=candidate_k,
             final_k=final_k,
             use_rerank=use_rerank,
+            use_hyde=use_hyde,
         )
         
-        # 生成
         result = generate_answer(
             question,
             retrieved_docs,
@@ -166,10 +177,9 @@ class RAGPipeline:
 
 # ==================== 测试入口 ====================
 if __name__ == "__main__":
-    # 一行初始化(默认开启 Reranker)
-    rag = RAGPipeline()
+    # 这次默认开 HyDE,对比看效果
+    rag = RAGPipeline(use_hyde=True)
     
-    # 4 个核心测试问题(跟 Day 1/2/3 一致, 方便横向对比)
     test_questions = [
         "LoRA 是什么? 它如何减少可训练参数?",
         "什么是检索增强生成?它解决什么问题?",
