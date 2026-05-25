@@ -1,0 +1,37 @@
+{
+  "refusal_rate": 100.0,
+  "total": 5,
+  "refusals": 5,
+  "details": [
+    {
+      "id": "D1",
+      "question": "What is the training cost of BERT in dollars?",
+      "answer": "根据提供的资料，我无法回答这个问题。资料中仅提到了BERT BASE和BERT LARGE的训练使用了多少TPU芯片以及训练时长（4天），但未提及具体的美元成本。[来源: bert.pdf, 第12页]",
+      "refused": true
+    },
+    {
+      "id": "D2",
+      "question": "Who is the CEO of OpenAI in 2024?",
+      "answer": "根据提供的资料，我无法回答这个问题。资料中未提及OpenAI在2024年的CEO信息。",
+      "refused": true
+    },
+    {
+      "id": "D3",
+      "question": "What is the weather like in Beijing today?",
+      "answer": "根据提供的资料，我无法回答这个问题。",
+      "refused": true
+    },
+    {
+      "id": "D4",
+      "question": "Recommend me a good Italian restaurant in Tokyo",
+      "answer": "根据提供的资料，我无法回答这个问题。资料内容涉及AI/机器学习论文中的评估方法、事实验证、推理过程等技术细节，未包含任何关于东京意大利餐厅推荐的信息。\n\n[来源: self_rag.pdf, 第5页; rag.pdf, 第3-4页; react.pdf, 第1页; gpt3.pdf, 第49页]",
+      "refused": true
+    },
+    {
+      "id": "D5",
+      "question": "How does GPT-5 differ from GPT-4?",
+      "answer": "根据提供的资料，我无法回答这个问题。资料中仅提及GPT-4的使用和评估方法，以及GPT-3的参数规模，没有任何关于GPT-5的信息或与GPT-4的对比内容。\n\n[来源: self_rag.pdf, 第16页; lora.pdf, 第0页]",
+      "refused": true
+    }
+  ]
+}

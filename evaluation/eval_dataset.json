@@ -1,0 +1,233 @@
+{
+  "version": "v1",
+  "description": "RAG QA System evaluation dataset - 20 questions covering 4 categories",
+  "questions": [
+    {
+      "id": "A1",
+      "category": "single_doc_factual",
+      "question": "What is LoRA and how does it reduce trainable parameters?",
+      "expected_source": "lora.pdf",
+      "key_facts": [
+        "LoRA stands for Low-Rank Adaptation",
+        "Uses low-rank decomposition: delta_W = B*A",
+        "B is d x r, A is r x k, r is small",
+        "Reduces parameters from d*k to r*(d+k)"
+      ],
+      "difficulty": "easy"
+    },
+    {
+      "id": "A2",
+      "category": "single_doc_factual",
+      "question": "What is the core idea of Chain-of-Thought prompting?",
+      "expected_source": "chain_of_thought.pdf",
+      "key_facts": [
+        "Generate intermediate reasoning steps",
+        "Improves complex reasoning ability",
+        "Used as few-shot prompts in LLMs"
+      ],
+      "difficulty": "easy"
+    },
+    {
+      "id": "A3",
+      "category": "single_doc_factual",
+      "question": "What is HyDE and what problem does it solve?",
+      "expected_source": "hyde.pdf",
+      "key_facts": [
+        "Hypothetical Document Embeddings",
+        "Zero-shot dense retrieval without relevance labels",
+        "LLM generates hypothetical documents for queries"
+      ],
+      "difficulty": "easy"
+    },
+    {
+      "id": "A4",
+      "category": "single_doc_factual",
+      "question": "How does QLoRA achieve 4-bit quantization?",
+      "expected_source": "qlora.pdf",
+      "key_facts": [
+        "Uses NormalFloat (NF4) data type",
+        "Double quantization for memory efficiency",
+        "Paged optimizers for memory spikes",
+        "Preserves full 16-bit fine-tuning task performance while reducing memory"
+      ],
+      "difficulty": "medium"
+    },
+    {
+      "id": "A5",
+      "category": "single_doc_factual",
+      "question": "What is BERT's masked language modeling objective?",
+      "expected_source": "bert.pdf",
+      "key_facts": [
+        "Random tokens are masked",
+        "Model predicts original tokens",
+        "Bidirectional context understanding"
+      ],
+      "difficulty": "easy"
+    },
+    {
+      "id": "B1",
+      "category": "cross_doc_comparison",
+      "question": "Compare LoRA and QLoRA in terms of memory efficiency",
+      "expected_source": ["lora.pdf", "qlora.pdf"],
+      "key_facts": [
+        "QLoRA uses 4-bit quantization to reduce memory further",
+        "QLoRA can fine-tune 65B model on single GPU",
+        "Both keep pretrained weights frozen"
+      ],
+      "difficulty": "medium"
+    },
+    {
+      "id": "B2",
+      "category": "cross_doc_comparison",
+      "question": "How does Self-RAG differ from standard RAG?",
+      "expected_source": ["rag.pdf", "self_rag.pdf"],
+      "key_facts": [
+        "Self-RAG uses reflection tokens",
+        "Self-RAG decides when to retrieve adaptively",
+        "Self-RAG critiques output quality"
+      ],
+      "difficulty": "medium"
+    },
+    {
+      "id": "B3",
+      "category": "cross_doc_comparison",
+      "question": "Compare GPT-3's few-shot learning with Chain-of-Thought prompting",
+      "expected_source": ["gpt3.pdf", "chain_of_thought.pdf"],
+      "key_facts": [
+        "GPT-3 few-shot uses input-output pairs",
+        "CoT adds reasoning steps between input and output",
+        "CoT particularly helps complex reasoning tasks"
+      ],
+      "difficulty": "hard"
+    },
+    {
+      "id": "B4",
+      "category": "cross_doc_comparison",
+      "question": "How do ReAct and Chain-of-Thought differ in their reasoning approaches?",
+      "expected_source": ["react.pdf", "chain_of_thought.pdf"],
+      "key_facts": [
+        "ReAct combines reasoning with actions",
+        "ReAct can interact with external tools",
+        "CoT is pure text reasoning without actions"
+      ],
+      "difficulty": "hard"
+    },
+    {
+      "id": "B5",
+      "category": "cross_doc_comparison",
+      "question": "Compare BERT and the original Transformer architecture",
+      "expected_source": ["bert.pdf", "attention_is_all_you_need.pdf"],
+      "key_facts": [
+        "BERT is encoder-only, Transformer has encoder-decoder",
+        "BERT uses bidirectional context",
+        "Both use multi-head self-attention"
+      ],
+      "difficulty": "medium"
+    },
+    {
+      "id": "C1",
+      "category": "chinese_query",
+      "question": "什么是检索增强生成 (RAG)? 它解决什么问题?",
+      "expected_source": "rag.pdf",
+      "key_facts": [
+        "RAG 结合检索和生成",
+        "通过外部知识库降低幻觉",
+        "可以处理知识密集型任务"
+      ],
+      "difficulty": "medium"
+    },
+    {
+      "id": "C2",
+      "category": "chinese_query",
+      "question": "LoRA 微调的核心思想是什么?",
+      "expected_source": "lora.pdf",
+      "key_facts": [
+        "权重更新的低秩分解",
+        "保持预训练权重冻结",
+        "大幅减少可训练参数"
+      ],
+      "difficulty": "medium"
+    },
+    {
+      "id": "C3",
+      "category": "chinese_query",
+      "question": "思维链 (Chain-of-Thought) 提示如何提升大模型的推理能力?",
+      "expected_source": "chain_of_thought.pdf",
+      "key_facts": [
+        "通过生成中间推理步骤",
+        "在 few-shot 示例中展示推理过程",
+        "在数学/逻辑等任务上显著提升"
+      ],
+      "difficulty": "medium"
+    },
+    {
+      "id": "C4",
+      "category": "chinese_query",
+      "question": "Transformer 的自注意力机制是怎么工作的?",
+      "expected_source": "attention_is_all_you_need.pdf",
+      "key_facts": [
+        "计算 Query、Key、Value 三个矩阵",
+        "通过 Q 和 K 的点积计算注意力权重",
+        "Scaled Dot-Product Attention"
+      ],
+      "difficulty": "hard"
+    },
+    {
+      "id": "C5",
+      "category": "chinese_query",
+      "question": "QLoRA 相比 LoRA 主要改进了什么?",
+      "expected_source": "qlora.pdf",
+      "key_facts": [
+        "4-bit NormalFloat 量化",
+        "Double Quantization 双重量化",
+        "Paged Optimizers 分页优化器"
+      ],
+      "difficulty": "medium"
+    },
+    {
+      "id": "D1",
+      "category": "out_of_scope",
+      "question": "What is the training cost of BERT in dollars?",
+      "expected_source": null,
+      "key_facts": [],
+      "expected_behavior": "should_refuse",
+      "difficulty": "easy"
+    },
+    {
+      "id": "D2",
+      "category": "out_of_scope",
+      "question": "Who is the CEO of OpenAI in 2024?",
+      "expected_source": null,
+      "key_facts": [],
+      "expected_behavior": "should_refuse",
+      "difficulty": "easy"
+    },
+    {
+      "id": "D3",
+      "category": "out_of_scope",
+      "question": "What is the weather like in Beijing today?",
+      "expected_source": null,
+      "key_facts": [],
+      "expected_behavior": "should_refuse",
+      "difficulty": "easy"
+    },
+    {
+      "id": "D4",
+      "category": "out_of_scope",
+      "question": "Recommend me a good Italian restaurant in Tokyo",
+      "expected_source": null,
+      "key_facts": [],
+      "expected_behavior": "should_refuse",
+      "difficulty": "easy"
+    },
+    {
+      "id": "D5",
+      "category": "out_of_scope",
+      "question": "How does GPT-5 differ from GPT-4?",
+      "expected_source": null,
+      "key_facts": [],
+      "expected_behavior": "should_refuse",
+      "difficulty": "easy"
+    }
+  ]
+}
