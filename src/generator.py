@@ -176,3 +176,77 @@ if __name__ == "__main__":
         print(f"\n📚 引用来源:")
         for s in result["sources"]:
             print(f"   - {s['file']} (第{s['page']}页)")
+
+# ==================== 流式生成版本 (Day 6 Gradio 用) ====================
+def generate_answer_streaming(
+    question: str,
+    retrieved_docs,
+    model: str = "deepseek-chat",
+    temperature: float = 0.3,
+):
+    """
+    流式生成: 逐 token 返回, 给 Gradio 实时打字效果
+    
+    Yields:
+        每次 yield (partial_answer, sources, context) 三元组
+        Gradio 看到生成器会自动逐次更新 UI
+    """
+    # 构造 prompt (跟非流式版本一致)
+    context_parts = []
+    sources = []
+    for i, doc in enumerate(retrieved_docs, 1):
+        source_file = doc.metadata.get("source_file", "?")
+        page = doc.metadata.get("page", "?")
+        content = doc.page_content
+        
+        context_parts.append(f"[资料{i}] (来源: {source_file}, 第{page}页)\n{content}")
+        sources.append({"file": source_file, "page": page})
+    
+    context = "\n\n".join(context_parts)
+    
+    system_prompt = """你是一个严谨的 AI 助手, 基于提供的参考资料回答用户问题。
+
+规则:
+1. 严格基于资料回答, 不编造内容
+2. 如果资料不够回答, 明确说"根据提供的资料, 我无法回答这个问题"
+3. 适当引用资料来源, 格式: [来源: file, 第X页]
+4. 回答简洁清晰, 用中文回复"""
+    
+    user_prompt = f"""参考资料:
+{context}
+
+问题: {question}
+
+请基于上述资料回答。"""
+    
+    # 调用 LLM 流式 API
+    client = get_llm_client()
+    
+    stream = client.chat.completions.create(
+        model=model,
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        temperature=temperature,
+        stream=True,  # ⭐ 关键: 启用流式
+    )
+    
+    # 逐 chunk 累积并 yield
+    partial_answer = ""
+    for chunk in stream:
+        if chunk.choices and chunk.choices[0].delta.content:
+            delta = chunk.choices[0].delta.content
+            partial_answer += delta
+            yield {
+                "answer": partial_answer,
+                "sources": sources,
+                "context": context,
+            }
+    
+    # 最后一次 yield 完整结果
+    yield {
+        "answer": partial_answer,
+        "sources": sources,
+        "context": context,
+    }    

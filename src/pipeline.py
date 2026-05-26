@@ -173,7 +173,46 @@ class RAGPipeline:
             output["context"] = result["context"]
         
         return output
-
+    
+    def query_streaming(
+        self,
+        question: str,
+        candidate_k: Optional[int] = None,
+        final_k: Optional[int] = None,
+        use_rerank: Optional[bool] = None,
+        use_hyde: Optional[bool] = None,
+    ):
+        """
+        流式版查询: 检索阶段同步, 生成阶段流式
+        
+        Yields:
+            每次 yield {"answer", "sources", "retrieved_docs"}
+            answer 是累积的部分答案 (像打字机)
+        """
+        from generator import generate_answer_streaming  # 流式生成器
+        
+        # 检索 + 精排 (这部分是同步的, 不能流式)
+        retrieved_docs = self.retrieve(
+            question,
+            candidate_k=candidate_k,
+            final_k=final_k,
+            use_rerank=use_rerank,
+            use_hyde=use_hyde,
+        )
+        
+        # 流式生成
+        for partial in generate_answer_streaming(
+            question,
+            retrieved_docs,
+            model=self.llm_model,
+            temperature=self.temperature,
+        ):
+            yield {
+                "question": question,
+                "answer": partial["answer"],
+                "sources": partial["sources"],
+                "retrieved_docs": retrieved_docs,
+            }
 
 # ==================== 测试入口 ====================
 if __name__ == "__main__":
