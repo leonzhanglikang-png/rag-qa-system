@@ -9,3 +9,7 @@ data/raw_pdfs/*.pdf
 *.log
 outputs/
 bm25_index.pkl
+
+# 个人面试准备文件
+docs/resume_snippets.md
+docs/interview_qa.md
